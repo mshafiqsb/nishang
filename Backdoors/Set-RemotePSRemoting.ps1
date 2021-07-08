@@ -9,9 +9,11 @@ The script takes a username and adds FUll Control (Generic All) to the ACL of Po
 
 The script needs elevated shell locally and administrative privileges on a remote target. 
 
-It is possible to remove the entries added by the script by using the -Remove option. s
+It is possible to remove the entries added by the script by using the -Remove option.
 
 The script is very useful as a backdoor on any machine but more so on high value targets like Domain controllers.
+
+If you get an error like 'The I/O operation has been aborted' - ignore it. The ACl has been most likely modified. 
 
 .PARAMETER UserName
 Username which will have remote access. 
@@ -31,11 +33,11 @@ PS C:\> Set-RemotePSRemoting -UserName labuser –Verbose
 Use the above command to add permissions on the local machine for labuser to access PowerShell remoting.
 
 .EXAMPLE
-PS C:\> Set-RemoteWMI -UserName labuser -ComputerName targetserver -Credential admin
-Use the above command to add permissions on the local machine for labuser to access PowerShell remoting.
+PS C:\> Set-RemotePSRemoting -UserName labuser -ComputerName targetserver -Credential admin
+Use the above command to add permissions on the remote machine for labuser to access PowerShell remoting.
 
 .EXAMPLE
-PS C:\> Set-RemoteWMI -UserName labuser -ComputerName targetserver -Credential admin -Remove
+PS C:\> Set-RemotePSRemoting -UserName labuser -ComputerName targetserver -Credential admin -Remove
 Remove the permissions added for labuser from the remote machine.
 
 
@@ -133,3 +135,4 @@ https://github.com/samratashok/nishang
         Invoke-Command -ScriptBlock $RemoteScriptBlock -ArgumentList $username,$Remove
     }
 }
+
